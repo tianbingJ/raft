@@ -19,6 +19,7 @@ type RPC struct {
 }
 
 // Respond is used to respond with a response, error or both
+// 向rpc发送响应
 func (r *RPC) Respond(resp interface{}, err error) {
 	r.RespChan <- RPCResponse{resp, err}
 }

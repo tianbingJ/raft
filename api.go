@@ -112,6 +112,7 @@ type Raft struct {
 
 	// lastContact is the last time we had contact from the
 	// leader node. This can be used to gauge staleness.
+	// 上一次与leader取得联系的时间
 	lastContact     time.Time
 	lastContactLock sync.RWMutex
 
@@ -150,6 +151,7 @@ type Raft struct {
 
 	// Tracks the latest configuration and latest committed configuration from
 	// the log/snapshot.
+	// 与成员变更有关?
 	configurations configurations
 
 	// Holds a copy of the latest configuration which can be read independently
@@ -157,6 +159,7 @@ type Raft struct {
 	latestConfiguration atomic.Value
 
 	// RPC chan comes from the transport layer
+	// 传输层来的rpc
 	rpcCh <-chan RPC
 
 	// Shutdown channel to exit, protected to prevent concurrent exits

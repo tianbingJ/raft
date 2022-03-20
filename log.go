@@ -37,6 +37,7 @@ const (
 	// LogConfiguration establishes a membership change configuration. It is
 	// created when a server is added, removed, promoted, etc. Only used
 	// when protocol version 1 or greater is in use.
+	// 成员变更
 	LogConfiguration
 )
 

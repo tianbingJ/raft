@@ -56,13 +56,16 @@ type raftState struct {
 	lastApplied uint64
 
 	// protects 4 next fields
+	// 保护后面四个字段的锁
 	lastLock sync.Mutex
 
 	// Cache the latest snapshot index/term
+	// 这俩需要同时更新
 	lastSnapshotIndex uint64
 	lastSnapshotTerm  uint64
 
 	// Cache the latest log from LogStore
+	// 这里需要同时更新
 	lastLogIndex uint64
 	lastLogTerm  uint64
 
@@ -139,6 +142,7 @@ func (r *raftState) setLastApplied(index uint64) {
 
 // Start a goroutine and properly handle the race between a routine
 // starting and incrementing, and exiting and decrementing.
+// 启动一个新的routine调用一个func，统计维护rouTinesGroup
 func (r *raftState) goFunc(f func()) {
 	r.routinesGroup.Add(1)
 	go func() {
@@ -147,6 +151,7 @@ func (r *raftState) goFunc(f func()) {
 	}()
 }
 
+// 等待所有的goroutines执行完
 func (r *raftState) waitShutdown() {
 	r.routinesGroup.Wait()
 }

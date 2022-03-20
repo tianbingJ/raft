@@ -40,6 +40,7 @@ func (r *Raft) getRPCHeader() RPCHeader {
 // the given RPC message.
 func (r *Raft) checkRPCHeader(rpc RPC) error {
 	// Get the header off the RPC message.
+	// 获取RPC Header
 	wh, ok := rpc.Command.(WithRPCHeader)
 	if !ok {
 		return fmt.Errorf("RPC does not have a header")
@@ -59,6 +60,7 @@ func (r *Raft) checkRPCHeader(rpc RPC) error {
 	// currently what we want, and in general support one version back. We
 	// may need to revisit this policy depending on how future protocol
 	// changes evolve.
+	// 一般版本只兼容上一个版本，更早之前的则不支持
 	if header.ProtocolVersion < r.config().ProtocolVersion-1 {
 		return ErrUnsupportedProtocol
 	}
@@ -100,6 +102,7 @@ func (r *Raft) setLeader(leaderAddr ServerAddress, leaderID ServerID) {
 	oldLeaderID := r.leaderID
 	r.leaderID = leaderID
 	r.leaderLock.Unlock()
+	//leadership改变
 	if oldLeaderAddr != leaderAddr || oldLeaderID != leaderID {
 		r.observe(LeaderObservation{LeaderAddr: leaderAddr, LeaderID: leaderID})
 	}
@@ -132,6 +135,7 @@ func (r *Raft) run() {
 	for {
 		// Check if we are doing a shutdown
 		select {
+		//如果channel closed，会返回零值
 		case <-r.shutdownCh:
 			// Clear the leader to prevent forwarding
 			r.setLeader("", "")
@@ -1148,6 +1152,7 @@ func (r *Raft) dispatchLogs(applyLogs []*logFuture) {
 // pass futures=nil.
 // Leaders call this when entries are committed. They pass the futures from any
 // inflight logs.
+// 提交index前的日志
 func (r *Raft) processLogs(index uint64, futures map[uint64]*logFuture) {
 	// Reject logs we've applied already
 	lastApplied := r.getLastApplied()
@@ -1156,8 +1161,10 @@ func (r *Raft) processLogs(index uint64, futures map[uint64]*logFuture) {
 		return
 	}
 
+	//定义apply batch的方法
 	applyBatch := func(batch []*commitTuple) {
 		select {
+		//发送提交日志到FSM
 		case r.fsmMutateCh <- batch:
 		case <-r.shutdownCh:
 			for _, cl := range batch {
@@ -1178,8 +1185,10 @@ func (r *Raft) processLogs(index uint64, futures map[uint64]*logFuture) {
 	for idx := lastApplied + 1; idx <= index; idx++ {
 		var preparedLog *commitTuple
 		// Get the log, either from the future or from our log store
+		// state = Follower时， futures is nil
 		future, futureOk := futures[idx]
 		if futureOk {
+			//准备commitTuple
 			preparedLog = r.prepareLog(&future.log, future)
 		} else {
 			l := new(Log)
@@ -1309,12 +1318,15 @@ func (r *Raft) appendEntries(rpc RPC, a *AppendEntriesRequest) {
 	}()
 
 	// Ignore an older term
+	// 如果请求的term比当前的还要小，说明leader已经过期
 	if a.Term < r.getCurrentTerm() {
 		return
 	}
 
 	// Increase the term if we see a newer one, also transition to follower
 	// if we ever get an appendEntries call
+	// a.Term更大，说明遇到一个更新的leader
+	// 后面这个条件意思：term相同，不是Follower，也不能是leader， 那只能是candidate
 	if a.Term > r.getCurrentTerm() || (r.getState() != Follower && !r.candidateFromLeadershipTransfer) {
 		// Ensure transition to follower
 		r.setState(Follower)
@@ -1329,10 +1341,13 @@ func (r *Raft) appendEntries(rpc RPC, a *AppendEntriesRequest) {
 		r.setLeader(r.trans.DecodePeer(a.Leader), ServerID(a.ID))
 	}
 	// Verify the last log entry
+	// 验证log的合法性
 	if a.PrevLogEntry > 0 {
 		lastIdx, lastTerm := r.getLastEntry()
 
 		var prevLogTerm uint64
+		//如果前一条日志就是最新的日志,就不用再从logs中读取数据了
+		//这里是正常复制日志的情况，大部分请求能都满足这个条件
 		if a.PrevLogEntry == lastIdx {
 			prevLogTerm = lastTerm
 
@@ -1349,6 +1364,7 @@ func (r *Raft) appendEntries(rpc RPC, a *AppendEntriesRequest) {
 			prevLogTerm = prevLog.Term
 		}
 
+		//term不相同，说明日志需要回退
 		if a.PrevLogTerm != prevLogTerm {
 			r.logger.Warn("previous log term mis-match",
 				"ours", prevLogTerm,
@@ -1366,6 +1382,7 @@ func (r *Raft) appendEntries(rpc RPC, a *AppendEntriesRequest) {
 		lastLogIdx, _ := r.getLastLog()
 		var newEntries []*Log
 		for i, entry := range a.Entries {
+			//如果entries[i]的index比当前raft的lastIndex还要大，说明后面的日志都没有
 			if entry.Index > lastLogIdx {
 				newEntries = a.Entries[i:]
 				break
@@ -1377,12 +1394,14 @@ func (r *Raft) appendEntries(rpc RPC, a *AppendEntriesRequest) {
 					"error", err)
 				return
 			}
+			//如果日志term不相同，说明本地日志与leader不一致，需要被覆盖
 			if entry.Term != storeEntry.Term {
 				r.logger.Warn("clearing log suffix", "from", entry.Index, "to", lastLogIdx)
 				if err := r.logs.DeleteRange(entry.Index, lastLogIdx); err != nil {
 					r.logger.Error("failed to clear log suffix", "error", err)
 					return
 				}
+				//如果当前leader过来的index比configuration例的index要旧，说明当前的配置有些超前，需要回滚到上一个提交的版本
 				if entry.Index <= r.configurations.latestIndex {
 					r.setLatestConfiguration(r.configurations.committed, r.configurations.committedIndex)
 				}
@@ -1427,6 +1446,7 @@ func (r *Raft) appendEntries(rpc RPC, a *AppendEntriesRequest) {
 		if r.configurations.latestIndex <= idx {
 			r.setCommittedConfiguration(r.configurations.latest, r.configurations.latestIndex)
 		}
+		//apply提交的日志
 		r.processLogs(idx, nil)
 		metrics.MeasureSince([]string{"raft", "rpc", "appendEntries", "processLogs"}, start)
 	}
@@ -1442,6 +1462,7 @@ func (r *Raft) appendEntries(rpc RPC, a *AppendEntriesRequest) {
 // called from the main thread, or from NewRaft() before any threads have begun.
 func (r *Raft) processConfigurationLogEntry(entry *Log) error {
 	switch entry.Type {
+	//成员变更
 	case LogConfiguration:
 		r.setCommittedConfiguration(r.configurations.latest, r.configurations.latestIndex)
 		r.setLatestConfiguration(DecodeConfiguration(entry.Data), entry.Index)
@@ -1893,6 +1914,7 @@ func (r *Raft) setLatestConfiguration(c Configuration, i uint64) {
 }
 
 // setCommittedConfiguration stores the committed configuration.
+// 提交变更，说明configuration里的index log已经被提交
 func (r *Raft) setCommittedConfiguration(c Configuration, i uint64) {
 	r.configurations.committed = c
 	r.configurations.committedIndex = i

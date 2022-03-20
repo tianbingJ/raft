@@ -72,6 +72,7 @@ type Server struct {
 // votes. This should include the local server, if it's a member of the cluster.
 // The servers are listed no particular order, but each should only appear once.
 // These entries are appended to the log during membership changes.
+// 记录集群中有哪些节点
 type Configuration struct {
 	Servers []Server
 }
@@ -152,6 +153,7 @@ type configurations struct {
 	committedIndex uint64
 	// latest is the latest configuration in the log/snapshot (may be committed
 	// or uncommitted)
+	//
 	latest Configuration
 	// latestIndex is the log index where 'latest' was written.
 	latestIndex uint64
