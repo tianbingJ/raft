@@ -170,6 +170,7 @@ func (c *configurations) Clone() (copy configurations) {
 
 // hasVote returns true if the server identified by 'id' is a Voter in the
 // provided Configuration.
+// 是否具有选票
 func hasVote(configuration Configuration, id ServerID) bool {
 	for _, server := range configuration.Servers {
 		if server.ID == id {

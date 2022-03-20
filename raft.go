@@ -195,6 +195,7 @@ func (r *Raft) runFollower() {
 			b.respond(r.liveBootstrap(b.configuration))
 
 		case <-heartbeatTimer:
+			//心跳超时,重置超时timer
 			// Restart the heartbeat timer
 			hbTimeout := r.config().HeartbeatTimeout
 			heartbeatTimer = randomTimeout(hbTimeout)
@@ -206,6 +207,7 @@ func (r *Raft) runFollower() {
 			}
 
 			// Heartbeat failed! Transition to the candidate state
+			// 心跳检测失败，状态变为candidate，发起选举
 			lastLeaderAddr, lastLeaderID := r.LeaderWithID()
 			r.setLeader("", "")
 
