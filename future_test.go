@@ -3,6 +3,7 @@ package raft
 import (
 	"errors"
 	"testing"
+	"time"
 )
 
 func TestDeferFutureSuccess(t *testing.T) {
@@ -38,5 +39,27 @@ func TestDeferFutureConcurrent(t *testing.T) {
 	go f.respond(want)
 	if got := f.Error(); got != want {
 		t.Errorf("unexpected error result; got %#v want %#v", got, want)
+	}
+}
+
+func TestDeferFutureWait(t *testing.T) {
+	var f deferError
+	f.init()
+
+	interval := 2 * time.Millisecond
+
+	t1 := time.Now()
+	go func() {
+		time.Sleep(interval)
+		f.respond(nil)
+	}()
+
+	error := f.Error()
+	if error != nil {
+		t.Fatal("expect error nil")
+	}
+	t2 := time.Now()
+	if !t2.After(t1.Add(interval)) {
+		t.Fatal("expected wait 2 millis")
 	}
 }

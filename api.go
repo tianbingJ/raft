@@ -83,6 +83,7 @@ type Raft struct {
 
 	// applyCh is used to async send logs to the main thread to
 	// be committed and applied to the FSM.
+	// 异步应用到状态机上
 	applyCh chan *logFuture
 
 	// conf stores the current configuration to use. This is the most recent one
